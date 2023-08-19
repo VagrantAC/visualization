@@ -25,6 +25,21 @@ function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fra
   gl.deleteProgram(program);
 }
 
+function randomInt(range: number) {
+  return Math.floor(Math.random() * range);
+}
+
+function setRectangle(gl: WebGLRenderingContext, x: number, y: number, width: number, height: number) {
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    x, y,
+    x + width, y,
+    x, y + height,
+    x, y + height,
+    x + width, y,
+    x + width, y + height,
+  ]), gl.STATIC_DRAW);
+}
+
 function main() {
   const canvas = document.querySelector("#root") as HTMLCanvasElement;
   const gl = canvas.getContext("webgl")!;
@@ -36,8 +51,8 @@ function main() {
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)!;
   const program = createProgram(gl, vertexShader, fragmentShader)!;
   const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-
   const resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
+  const colorUniformLocation = gl.getUniformLocation(program, 'u_color');
 
   // Create a buffer and put three 2d clip space points in it
   const positionBuffer = gl.createBuffer();
@@ -45,16 +60,6 @@ function main() {
   // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
-  var positions = [
-    10, 20,
-    80, 20,
-    10, 30,
-    10, 30,
-    80, 20,
-    80, 30,
-  ];
-
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
   gl.canvas.width = window.innerWidth;
   gl.canvas.height = window.innerHeight;
 
@@ -74,8 +79,6 @@ function main() {
   // Bind the position buffer.
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
-  gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
-
   // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
   const size = 2;          // 2 components per iteration
   const type = gl.FLOAT;   // the data is 32bit floats
@@ -85,11 +88,16 @@ function main() {
   gl.vertexAttribPointer(
     positionAttributeLocation, size, type, normalize, stride, pointerOffset);
 
-  // draw
-  const primitiveType = gl.TRIANGLES;
-  const arraysOffset = 0;
-  const count = 6;
-  gl.drawArrays(primitiveType, arraysOffset, count);
+  gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
+
+
+  for (let i = 0; i < 50; ++i) {
+    setRectangle(
+      gl, randomInt(300), randomInt(300), randomInt(300), randomInt(300)
+    )
+    gl.uniform4f(colorUniformLocation, Math.random(), Math.random(), Math.random(), 1);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
 }
 
 main();
