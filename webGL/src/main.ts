@@ -1,102 +1,106 @@
-function createShader(gl: WebGLRenderingContext, type: number, source: string) {
-  const shader = gl.createShader(type)!;
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-  if (success) {
-    return shader;
-  }
+import { createProgramFromScripts } from "twgl.js";
+import * as m3 from "./utils/m3";
 
-  console.log(gl.getShaderInfoLog(shader));
-  gl.deleteShader(shader);
-}
-
-function createProgram(gl: WebGLRenderingContext, vertexShader: WebGLShader, fragmentShader: WebGLShader) {
-  const program = gl.createProgram()!;
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  const success = gl.getProgramParameter(program, gl.LINK_STATUS);
-  if (success) {
-    return program;
-  }
-
-  console.log(gl.getProgramInfoLog(program));
-  gl.deleteProgram(program);
-}
-
-function randomInt(range: number) {
-  return Math.floor(Math.random() * range);
-}
-
-function setRectangle(gl: WebGLRenderingContext, x: number, y: number, width: number, height: number) {
+function setGeomentry(gl: WebGLRenderingContext) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-    x, y,
-    x + width, y,
-    x, y + height,
-    x, y + height,
-    x + width, y,
-    x + width, y + height,
+    -150, -100,
+    150, -100,
+    -150, 100,
+    -150, 100,
+    150, -100,
+    150, 100,
   ]), gl.STATIC_DRAW);
 }
+
+function setColors(gl: WebGLRenderingContext) {
+  const r1 = Math.random() * 256;
+  const b1 = Math.random() * 256;
+  const g1 = Math.random() * 256;
+  const r2 = Math.random() * 256;
+  const b2 = Math.random() * 256;
+  const g2 = Math.random() * 256;
+
+  gl.bufferData(
+    gl.ARRAY_BUFFER,
+    new Uint8Array(
+      [r1, b1, g1, 255,
+        r1, b1, g1, 255,
+        r1, b1, g1, 255,
+        r2, b2, g2, 255,
+        r2, b2, g2, 255,
+        r2, b2, g2, 255]),
+    gl.STATIC_DRAW);
+}
+
 
 function main() {
   const canvas = document.querySelector("#root") as HTMLCanvasElement;
   const gl = canvas.getContext("webgl")!;
 
-  const vertexShaderSource = (document.querySelector("#vertex-shader-2d") as HTMLScriptElement).text;
-  const fragmentShaderSource = (document.querySelector("#fragment-shader-2d") as HTMLScriptElement).text;
-
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)!;
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)!;
-  const program = createProgram(gl, vertexShader, fragmentShader)!;
+  const program = createProgramFromScripts(gl, ["vertex-shader-2d", "fragment-shader-2d"]);
   const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-  const resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution");
-  const colorUniformLocation = gl.getUniformLocation(program, 'u_color');
+  const colorAttributeLocation = gl.getAttribLocation(program, "a_color");
+  const matrixLocation = gl.getUniformLocation(program, "u_matrix");
 
   // Create a buffer and put three 2d clip space points in it
   const positionBuffer = gl.createBuffer();
-
-  // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  setGeomentry(gl);
 
-  gl.canvas.width = window.innerWidth;
-  gl.canvas.height = window.innerHeight;
+  const colorBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+  setColors(gl);
 
-  // Tell WebGL how to convert from clip space to pixels
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  const translation = [200, 150];
+  const angleInRadians = 0;
+  const scale = [1, 1];
 
-  // Clear the canvas
-  gl.clearColor(0, 0, 0, 0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
+  drawScene();
 
-  // Tell it to use our program (pair of shaders)
-  gl.useProgram(program);
+  function drawScene() {
+    gl.canvas.width = 400;
+    gl.canvas.height = 400;
 
-  // Turn on the attribute
-  gl.enableVertexAttribArray(positionAttributeLocation);
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.clear(gl.COLOR_BUFFER_BIT);
 
-  // Bind the position buffer.
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.useProgram(program);
 
-  // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-  const size = 2;          // 2 components per iteration
-  const type = gl.FLOAT;   // the data is 32bit floats
-  const normalize = false; // don't normalize the data
-  const stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-  const pointerOffset = 0;        // start at the beginning of the buffer
-  gl.vertexAttribPointer(
-    positionAttributeLocation, size, type, normalize, stride, pointerOffset);
+    gl.enableVertexAttribArray(positionAttributeLocation);
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    const positionAttribute = {
+      size: 2,
+      type: gl.FLOAT,
+      normalize: false,
+      stride: 0,
+      offset: 0,
+    }
+    gl.vertexAttribPointer(
+      positionAttributeLocation, positionAttribute.size, positionAttribute.type, positionAttribute.normalize, positionAttribute.stride, positionAttribute.offset);
 
-  gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
+    gl.enableVertexAttribArray(colorAttributeLocation);
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    const vertexAttribute = {
+      size: 4,
+      type: gl.UNSIGNED_BYTE,
+      normalize: true,
+      stride: 0,
+      offset: 0,
+    }
+    gl.vertexAttribPointer(
+      colorAttributeLocation, vertexAttribute.size, vertexAttribute.type, vertexAttribute.normalize, vertexAttribute.stride, vertexAttribute.offset);
 
+    let matrix = m3.projection(gl.canvas.width, gl.canvas.height);
+    matrix = m3.translate(matrix, translation[0], translation[1]);
+    matrix = m3.rotate(matrix, angleInRadians);
+    matrix = m3.scale(matrix, scale[0], scale[1]);
 
-  for (let i = 0; i < 50; ++i) {
-    setRectangle(
-      gl, randomInt(300), randomInt(300), randomInt(300), randomInt(300)
-    )
-    gl.uniform4f(colorUniformLocation, Math.random(), Math.random(), Math.random(), 1);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.uniformMatrix3fv(matrixLocation, false, matrix);
+
+    const primitiveType = gl.TRIANGLES;
+    const offset = 0;
+    const count = 6;
+    gl.drawArrays(primitiveType, offset, count);
   }
 }
 

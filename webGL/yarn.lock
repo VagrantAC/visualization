@@ -1438,6 +1438,11 @@ ts-api-utils@^1.0.1:
   resolved "https://registry.yarnpkg.com/ts-api-utils/-/ts-api-utils-1.0.1.tgz#8144e811d44c749cd65b2da305a032510774452d"
   integrity sha512-lC/RGlPmwdrIBFTX59wwNzqh7aR2otPNPR/5brHZm/XKFYKsfqxihXUe9pU3JI+3vGkl+vyCoNNnPhJn3aLK1A==
 
+twgl.js@^5.5.1:
+  version "5.5.1"
+  resolved "https://registry.yarnpkg.com/twgl.js/-/twgl.js-5.5.1.tgz#90502f68ad2974f3d6ebb95bdef68c6919a3f0e6"
+  integrity sha512-YPzBb3Eo1ZMye489xsEN7TX6EtdP8TutWV2/vOJpjgWG2MxsDW+GiL7Vc1Nr7wdkwn//sE0Um15Uaq2QJmfOgQ==
+
 type-check@^0.4.0, type-check@~0.4.0:
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/type-check/-/type-check-0.4.0.tgz#07b8203bfa7056c0657050e3ccd2c37730bab8f1"
