@@ -1,107 +1,115 @@
-import { createProgramFromScripts } from "twgl.js";
-import * as m3 from "./utils/m3";
+import { createProgramFromScripts, resizeCanvasToDisplaySize } from "twgl.js";
+import { setRectangle } from "./utils/set";
 
-function setGeomentry(gl: WebGLRenderingContext) {
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-    -150, -100,
-    150, -100,
-    -150, 100,
-    -150, 100,
-    150, -100,
-    150, 100,
-  ]), gl.STATIC_DRAW);
+function requestCORSIfNotSameOrigin(img: HTMLImageElement, url: string) {
+  if ((new URL(url, window.location.href)).origin !== window.location.origin) {
+    img.crossOrigin = "";
+  }
 }
-
-function setColors(gl: WebGLRenderingContext) {
-  const r1 = Math.random() * 256;
-  const b1 = Math.random() * 256;
-  const g1 = Math.random() * 256;
-  const r2 = Math.random() * 256;
-  const b2 = Math.random() * 256;
-  const g2 = Math.random() * 256;
-
-  gl.bufferData(
-    gl.ARRAY_BUFFER,
-    new Uint8Array(
-      [r1, b1, g1, 255,
-        r1, b1, g1, 255,
-        r1, b1, g1, 255,
-        r2, b2, g2, 255,
-        r2, b2, g2, 255,
-        r2, b2, g2, 255]),
-    gl.STATIC_DRAW);
-}
-
 
 function main() {
+  const image = new Image();
+  requestCORSIfNotSameOrigin(image, "https://webglfundamentals.org/webgl/resources/leaves.jpg")
+  image.src = "https://webglfundamentals.org/webgl/resources/leaves.jpg"
+  image.onload = () => {
+    render(image)
+  }
+}
+
+function computeKernelWeight(kenrel: number[]) {
+  const weight = kenrel.reduce((prev: number, curr: number) => prev + curr);
+  return weight <= 0 ? 1 : weight;
+
+}
+
+function render(image: HTMLImageElement) {
   const canvas = document.querySelector("#root") as HTMLCanvasElement;
   const gl = canvas.getContext("webgl")!;
 
   const program = createProgramFromScripts(gl, ["vertex-shader-2d", "fragment-shader-2d"]);
-  const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-  const colorAttributeLocation = gl.getAttribLocation(program, "a_color");
-  const matrixLocation = gl.getUniformLocation(program, "u_matrix");
+  const positionLocation = gl.getAttribLocation(program, "a_position");
+  const texcoordLocation = gl.getAttribLocation(program, "a_texCoord");
 
-  // Create a buffer and put three 2d clip space points in it
   const positionBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-  setGeomentry(gl);
+  setRectangle(gl, 0, 0, image.width, image.height);
 
-  const colorBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-  setColors(gl);
+  const texcoordBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    0.0, 0.0,
+    1.0, 0.0,
+    0.0, 1.0,
+    0.0, 1.0,
+    1.0, 0.0,
+    1.0, 1.0,
+  ]), gl.STATIC_DRAW);
 
-  const translation = [200, 150];
-  const angleInRadians = 0;
-  const scale = [1, 1];
 
-  drawScene();
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
 
-  function drawScene() {
-    gl.canvas.width = 400;
-    gl.canvas.height = 400;
+  // Set the parameters so we can render any size image.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+  // Upload the image into the texture.
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
-    gl.useProgram(program);
+  const resolutionLocation = gl.getUniformLocation(program, "u_resolution");
+  resizeCanvasToDisplaySize(gl.canvas as HTMLCanvasElement);
 
-    gl.enableVertexAttribArray(positionAttributeLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    const positionAttribute = {
-      size: 2,
-      type: gl.FLOAT,
-      normalize: false,
-      stride: 0,
-      offset: 0,
-    }
-    gl.vertexAttribPointer(
-      positionAttributeLocation, positionAttribute.size, positionAttribute.type, positionAttribute.normalize, positionAttribute.stride, positionAttribute.offset);
+  const textureSizeLocation = gl.getUniformLocation(program, "u_textureSize");
+  const kernelLocation = gl.getUniformLocation(program, "u_kernel[0]");
+  const kernelWeightLocation = gl.getUniformLocation(program, "u_kernelWeight");
 
-    gl.enableVertexAttribArray(colorAttributeLocation);
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    const vertexAttribute = {
-      size: 4,
-      type: gl.UNSIGNED_BYTE,
-      normalize: true,
-      stride: 0,
-      offset: 0,
-    }
-    gl.vertexAttribPointer(
-      colorAttributeLocation, vertexAttribute.size, vertexAttribute.type, vertexAttribute.normalize, vertexAttribute.stride, vertexAttribute.offset);
+  const edgeDetectKernel = [
+    -1, -1, -1,
+    -1, 8, -1,
+    -1, -1, -1,
+  ];
 
-    let matrix = m3.projection(gl.canvas.width, gl.canvas.height);
-    matrix = m3.translate(matrix, translation[0], translation[1]);
-    matrix = m3.rotate(matrix, angleInRadians);
-    matrix = m3.scale(matrix, scale[0], scale[1]);
+  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.uniformMatrix3fv(matrixLocation, false, matrix);
+  gl.useProgram(program);
 
-    const primitiveType = gl.TRIANGLES;
-    const offset = 0;
-    const count = 6;
-    gl.drawArrays(primitiveType, offset, count);
+  gl.enableVertexAttribArray(positionLocation);
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  const positionAttribute = {
+    size: 2,
+    type: gl.FLOAT,
+    normalize: false,
+    stride: 0,
+    offset: 0,
   }
+  gl.vertexAttribPointer(
+    positionLocation, positionAttribute.size, positionAttribute.type, positionAttribute.normalize, positionAttribute.stride, positionAttribute.offset);
+
+  gl.enableVertexAttribArray(texcoordLocation);
+  gl.bindBuffer(gl.ARRAY_BUFFER, texcoordBuffer);
+  const texcoordAttribute = {
+    size: 2,
+    type: gl.FLOAT,
+    normalize: false,
+    stride: 0,
+    offset: 0,
+  }
+  gl.vertexAttribPointer(
+    texcoordLocation, texcoordAttribute.size, texcoordAttribute.type, texcoordAttribute.normalize, texcoordAttribute.stride, texcoordAttribute.offset);
+
+  gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
+  gl.uniform2f(textureSizeLocation, image.width, image.height);
+  gl.uniform1fv(kernelLocation, edgeDetectKernel);
+  gl.uniform1f(kernelWeightLocation, computeKernelWeight(edgeDetectKernel));
+
+  const primitiveType = gl.TRIANGLES;
+  const offset = 0;
+  const count = 6;
+  gl.drawArrays(primitiveType, offset, count);
 }
 
 main();
