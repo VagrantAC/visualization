@@ -8,3 +8,9 @@ export function setRectangle(gl: WebGLRenderingContext, x: number, y: number, wi
     x + width, y + height,
   ]), gl.STATIC_DRAW);
 }
+
+export function setFramebuffer(gl: WebGLRenderingContext, resolutionLocation: WebGLUniformLocation | null, fbo: WebGLFramebuffer | null, width: number, height: number) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.uniform2f(resolutionLocation, width, height);
+  gl.viewport(0, 0, width, height);
+}

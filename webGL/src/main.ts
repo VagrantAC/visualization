@@ -1,11 +1,9 @@
 import { createProgramFromScripts, resizeCanvasToDisplaySize } from "twgl.js";
-import { setRectangle } from "./utils/set";
+import { setFramebuffer, setRectangle } from "./utils/set";
+import { requestCORSIfNotSameOrigin } from "./utils/request";
+import { createAndSetupTexture } from "./utils/texture";
+import { drawWithKernel, kernels } from "./const";
 
-function requestCORSIfNotSameOrigin(img: HTMLImageElement, url: string) {
-  if ((new URL(url, window.location.href)).origin !== window.location.origin) {
-    img.crossOrigin = "";
-  }
-}
 
 function main() {
   const image = new Image();
@@ -14,12 +12,6 @@ function main() {
   image.onload = () => {
     render(image)
   }
-}
-
-function computeKernelWeight(kenrel: number[]) {
-  const weight = kenrel.reduce((prev: number, curr: number) => prev + curr);
-  return weight <= 0 ? 1 : weight;
-
 }
 
 function render(image: HTMLImageElement) {
@@ -46,32 +38,31 @@ function render(image: HTMLImageElement) {
   ]), gl.STATIC_DRAW);
 
 
-  const texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-
-  // Set the parameters so we can render any size image.
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-
-  // Upload the image into the texture.
+  const originalImageTexture = createAndSetupTexture(gl);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
 
-  const resolutionLocation = gl.getUniformLocation(program, "u_resolution");
-  resizeCanvasToDisplaySize(gl.canvas as HTMLCanvasElement);
+  const textures: WebGLTexture[] = [];
+  const framebuffers: WebGLFramebuffer[] = [];
+  for (let i = 0; i < 2; i++) {
+    const texture = createAndSetupTexture(gl);
+    textures.push(texture!);
 
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, image.width, image.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    const fbo = gl.createFramebuffer();
+    framebuffers.push(fbo!);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  }
+  const resolutionLocation = gl.getUniformLocation(program, "u_resolution");
   const textureSizeLocation = gl.getUniformLocation(program, "u_textureSize");
   const kernelLocation = gl.getUniformLocation(program, "u_kernel[0]");
   const kernelWeightLocation = gl.getUniformLocation(program, "u_kernelWeight");
+  const flipYLocation = gl.getUniformLocation(program, "u_flipY");
 
-  const edgeDetectKernel = [
-    -1, -1, -1,
-    -1, 8, -1,
-    -1, -1, -1,
-  ];
-
-  gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+  resizeCanvasToDisplaySize(gl.canvas as HTMLCanvasElement);
   gl.clearColor(0, 0, 0, 0);
   gl.clear(gl.COLOR_BUFFER_BIT);
 
@@ -79,6 +70,7 @@ function render(image: HTMLImageElement) {
 
   gl.enableVertexAttribArray(positionLocation);
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+
   const positionAttribute = {
     size: 2,
     type: gl.FLOAT,
@@ -101,15 +93,20 @@ function render(image: HTMLImageElement) {
   gl.vertexAttribPointer(
     texcoordLocation, texcoordAttribute.size, texcoordAttribute.type, texcoordAttribute.normalize, texcoordAttribute.stride, texcoordAttribute.offset);
 
-  gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
   gl.uniform2f(textureSizeLocation, image.width, image.height);
-  gl.uniform1fv(kernelLocation, edgeDetectKernel);
-  gl.uniform1f(kernelWeightLocation, computeKernelWeight(edgeDetectKernel));
+  gl.bindTexture(gl.TEXTURE_2D, originalImageTexture);
+  gl.uniform1f(flipYLocation, 1);
 
-  const primitiveType = gl.TRIANGLES;
-  const offset = 0;
-  const count = 6;
-  gl.drawArrays(primitiveType, offset, count);
+
+  [kernels.gaussianBlur2, kernels.emboss, kernels.boxBlur, kernels.sharpness, kernels.previtVertical].forEach((kernel, count) => {
+    setFramebuffer(gl, resolutionLocation, framebuffers[count % 2], image.width, image.height);
+    drawWithKernel(gl, kernelLocation!, kernelWeightLocation!, kernel);
+    gl.bindTexture(gl.TEXTURE_2D, textures[count % 2]);
+  })
+
+  gl.uniform1f(flipYLocation, -1);  // need to y flip for canvas
+  setFramebuffer(gl, resolutionLocation, null, gl.canvas.width, gl.canvas.height);
+  drawWithKernel(gl, kernelLocation!, kernelWeightLocation!, kernels.normal);
 }
 
 main();
